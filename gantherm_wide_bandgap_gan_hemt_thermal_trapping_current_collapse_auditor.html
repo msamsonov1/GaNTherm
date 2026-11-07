@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GaNTherm — GaN HEMT Thermal Trapping & Current-Collapse Auditor</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- MathJax v3 Configuration -->
+    <script>
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            },
+            svg: { fontCache: 'global' }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <!-- Custom Theme Styles -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #05070d;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .formula-box {
+            background-color: #030712;
+            padding: 0.85rem 1.25rem;
+            border-radius: 0.5rem;
+            border: 1px solid #1f2937;
+            color: #67e8f9;
+            font-size: 0.925rem;
+            overflow-x: auto;
+            margin: 0.75rem 0;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+        }
+
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0b0f19;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        .glass-panel {
+            background: rgba(13, 18, 30, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .glow-cyan {
+            box-shadow: 0 0 20px -5px rgba(6, 182, 212, 0.35);
+        }
+        .glow-rose {
+            box-shadow: 0 0 20px -5px rgba(244, 63, 94, 0.45);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.35);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#05070d] text-slate-200">
+
+    <!-- Top Navigation Bar -->
+    <header class="border-b border-slate-800/80 bg-[#080c16]/90 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                    <i data-lucide="zap" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <span class="font-bold text-lg tracking-wide text-white">GaNTherm</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 mono">NASA SBIR T15.02</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-800 mono">AlGaN/GaN 2DEG</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">Thermal Trapping & Dynamic Current-Collapse In-Flight Observer</p>
+                </div>
+            </div>
+
+            <!-- Tab Buttons -->
+            <nav class="flex items-center space-x-1 sm:space-x-2 bg-slate-900/80 p-1 rounded-xl border border-slate-800">
+                <button id="tabBtnSim" onclick="switchTab('sim')" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center space-x-1.5 bg-cyan-500 text-slate-950 shadow-md">
+                    <i data-lucide="activity" class="w-4 h-4"></i>
+                    <span>Live HUD</span>
+                </button>
+                <button id="tabBtnPhysics" onclick="switchTab('physics')" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center space-x-1.5">
+                    <i data-lucide="atom" class="w-4 h-4"></i>
+                    <span>Core Physics</span>
+                </button>
+                <button id="tabBtnProposal" onclick="switchTab('proposal')" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center space-x-1.5">
+                    <i data-lucide="rocket" class="w-4 h-4"></i>
+                    <span>NASA STTR ($225k)</span>
+                </button>
+                <button id="tabBtnARR" onclick="switchTab('arr')" class="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center space-x-1.5">
+                    <i data-lucide="trending-up" class="w-4 h-4"></i>
+                    <span>Commercial ARR</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: LIVE SIMULATION & TELEMETRY HUD      -->
+        <!-- ========================================== -->
+        <div id="viewSim" class="space-y-6">
+            
+            <!-- Global Status Ribbon -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="glass-panel p-4 rounded-xl border-l-4 border-l-cyan-500">
+                    <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Dynamic Conductance ($G$)</div>
+                    <div class="mt-1 flex items-baseline justify-between">
+                        <span id="metricG" class="text-2xl font-bold mono text-cyan-400">14.28 S</span>
+                        <span id="metricGDelta" class="text-xs mono text-rose-400">-32.4% collapse</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1">Static Datasheet: 21.12 S</div>
+                </div>
+
+                <div class="glass-panel p-4 rounded-xl border-l-4 border-l-amber-500">
+                    <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Junction Temp ($T_{\text{j}}$)</div>
+                    <div class="mt-1 flex items-baseline justify-between">
+                        <span id="metricT" class="text-2xl font-bold mono text-amber-400">142.5 °C</span>
+                        <span id="metricThermalRate" class="text-xs mono text-amber-300">+12.4 K/s</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1">Thermal Range: -55°C to +200°C</div>
+                </div>
+
+                <div class="glass-panel p-4 rounded-xl border-l-4 border-l-violet-500">
+                    <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Trapped Charge Density ($N_{\text{T}}$)</div>
+                    <div class="mt-1 flex items-baseline justify-between">
+                        <span id="metricNt" class="text-2xl font-bold mono text-violet-400">4.82e12</span>
+                        <span class="text-xs mono text-violet-300">cm⁻²</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1">Carbon/Iron Acceptor Centers</div>
+                </div>
+
+                <div class="glass-panel p-4 rounded-xl border-l-4 border-l-emerald-500" id="cardMitigation">
+                    <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Observer Controller</div>
+                    <div class="mt-1 flex items-baseline justify-between">
+                        <span id="metricState" class="text-lg font-bold mono text-emerald-400">INSPECTION</span>
+                        <span id="metricPulse" class="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 mono">PULSE READY</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500 mt-1" id="metricSubPulse">Sub-Threshold De-Trapping: IDLE</div>
+                </div>
+            </div>
+
+            <!-- Main Stage: Canvas Heterostructure + Phase-Space Diagnostics -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left: 2DEG GaN Physical Hardware Canvas -->
+                <div class="lg:col-span-7 glass-panel p-5 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                            <div class="flex items-center space-x-2">
+                                <span class="w-3 h-3 rounded-full bg-cyan-400 animate-pulse"></span>
+                                <h3 class="font-semibold text-white text-sm">AlGaN/GaN Heterostructure 2DEG Carrier Dynamics</h3>
+                            </div>
+                            <span class="text-xs text-slate-400 mono">Spatial Micro-Cross-Section</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-2">
+                            Simulating the 2-Dimensional Electron Gas (2DEG) quantum well at the AlGaN/GaN heterointerface. Deep donor/acceptor traps (Fe/C) in the GaN buffer freeze charge during thermal swings, triggering virtual-gate current collapse.
+                        </p>
+                    </div>
+
+                    <div class="my-4 relative bg-[#03050a] rounded-xl border border-slate-800 overflow-hidden flex items-center justify-center">
+                        <canvas id="hemtCanvas" class="w-full h-[280px] block"></canvas>
+                        <!-- Canvas Legend Overlay -->
+                        <div class="absolute bottom-2 left-3 flex flex-wrap gap-3 text-[10px] mono bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-700/60 pointer-events-none">
+                            <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span><span class="text-cyan-200">2DEG Free Electrons</span></div>
+                            <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span><span class="text-rose-200">Trapped Electrons (Frozen)</span></div>
+                            <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span><span class="text-amber-200">De-Trapped Discharge</span></div>
+                            <div class="flex items-center space-x-1.5"><span class="w-2.5 h-1 bg-violet-400"></span><span class="text-violet-200">Gate Bias Field</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Canvas Realtime Controls -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                        <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-center">
+                            <span class="text-slate-400 block text-[10px]">Gate Bias ($V_{\text{GS}}$)</span>
+                            <span id="canvasVgs" class="font-bold mono text-cyan-400">-1.2 V (OFF)</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-center">
+                            <span class="text-slate-400 block text-[10px]">Drain Bias ($V_{\text{DS}}$)</span>
+                            <span id="canvasVds" class="font-bold mono text-amber-400">400 V DC</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-center">
+                            <span class="text-slate-400 block text-[10px]">Dead-Time ($\Delta t_{\text{dead}}$)</span>
+                            <span id="canvasDeadtime" class="font-bold mono text-violet-400">45 ns</span>
+                        </div>
+                        <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800 text-center">
+                            <span class="text-slate-400 block text-[10px]">De-Trap Pulse</span>
+                            <span id="canvasDeTrapState" class="font-bold mono text-emerald-400">INACTIVE</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Dynamic (T, G) Phase-Space Diagnostics -->
+                <div class="lg:col-span-5 glass-panel p-5 rounded-2xl flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                            <div class="flex items-center space-x-2">
+                                <i data-lucide="crosshair" class="w-4 h-4 text-cyan-400"></i>
+                                <h3 class="font-semibold text-white text-sm">Phase-Space: Conductance ($G$) vs. Temperature ($T$)</h3>
+                            </div>
+                            <span class="text-xs text-rose-400 mono animate-pulse" id="collapseBadge">Nominal</span>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-2">
+                            Real-time operating trajectory $(T, G)$ plotted against the static datasheet baseline curve. Deviations entering the red shaded collapse corridor confirm deep electron trapping.
+                        </p>
+                    </div>
+
+                    <div class="h-[280px] w-full my-3">
+                        <canvas id="phaseChart"></canvas>
+                    </div>
+
+                    <div class="text-[11px] text-slate-400 flex items-center justify-between bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                        <span><strong class="text-cyan-400">Static Datasheet:</strong> $G_0(T) = \mu_0 (T/300)^{-\gamma}$</span>
+                        <span class="mono text-rose-400 font-semibold" id="conductanceDeficit">Deficit: 0.00 S</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Secondary Telemetry: Dynamic Ron Tracking & Sub-Threshold Pulse Profile -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Time-Series Chart 1: Dynamic R_DS(on) Degradation -->
+                <div class="glass-panel p-5 rounded-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="line-chart" class="w-4 h-4 text-violet-400"></i>
+                            <h4 class="font-semibold text-white text-xs sm:text-sm">Dynamic On-Resistance Degradation: $R_{\text{DS(on)}}(t)$ vs. Baseline</h4>
+                        </div>
+                        <span class="text-xs mono text-violet-300" id="currentRon">70.0 mΩ</span>
+                    </div>
+                    <div class="h-[180px] w-full">
+                        <canvas id="ronTimeChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Time-Series Chart 2: Closed-Loop De-Trapping Injection Signal -->
+                <div class="glass-panel p-5 rounded-2xl">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="cpu" class="w-4 h-4 text-emerald-400"></i>
+                            <h4 class="font-semibold text-white text-xs sm:text-sm">Adaptive Gate Waveform & Sub-Threshold Excitation Pulse ($V_{\text{GS}}$)</h4>
+                        </div>
+                        <span class="text-xs mono text-emerald-400" id="pulseStrength">0.0 V Bias Offset</span>
+                    </div>
+                    <div class="h-[180px] w-full">
+                        <canvas id="waveformChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Closed-Loop Interactive Control Terminal -->
+            <div class="glass-panel p-6 rounded-2xl border border-cyan-500/20">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 mb-4 border-b border-slate-800 gap-4">
+                    <div>
+                        <h3 class="font-bold text-white text-base flex items-center space-x-2">
+                            <i data-lucide="sliders" class="w-5 h-5 text-cyan-400"></i>
+                            <span>Environmental Thermal Injection & Adaptive Gate Driver Control Panel</span>
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-1">
+                            Adjust junction thermal slew rates, switch operating frequencies, or inject cryogenic orbital freeze-out to evaluate autonomous current-collapse mitigation.
+                        </p>
+                    </div>
+
+                    <div class="flex items-center space-x-3">
+                        <button id="btnAutonomousToggle" onclick="toggleAutonomous()" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 flex items-center space-x-2">
+                            <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+                            <span id="autoBtnText">Closed-Loop Auditor: ACTIVE</span>
+                        </button>
+                        <button onclick="injectThermalShock()" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 flex items-center space-x-2">
+                            <i data-lucide="flame" class="w-4 h-4 text-rose-400"></i>
+                            <span>Inject Thermal Shock (+120K)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Slider 1: Ambient / Baseplate Temp -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300 font-medium">Junction Baseplate Temp ($T$)</span>
+                            <span id="sliderTempVal" class="mono text-amber-400 font-bold">120 °C</span>
+                        </div>
+                        <input id="sliderTemp" type="range" min="-55" max="200" value="120" step="1" oninput="updateSliders()" class="w-full accent-amber-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500 mono">
+                            <span>-55°C (Deep Space)</span>
+                            <span>25°C (Ambient)</span>
+                            <span>200°C (Hard Limit)</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 2: Inverter Switching Frequency -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300 font-medium">Switching Frequency ($f_{\text{sw}}$)</span>
+                            <span id="sliderFreqVal" class="mono text-cyan-400 font-bold">300 kHz</span>
+                        </div>
+                        <input id="sliderFreq" type="range" min="50" max="1000" value="300" step="10" oninput="updateSliders()" class="w-full accent-cyan-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500 mono">
+                            <span>50 kHz</span>
+                            <span>500 kHz (Resonant)</span>
+                            <span>1 MHz (Ultra-HF)</span>
+                        </div>
+                    </div>
+
+                    <!-- Slider 3: Pulse Dead-Time Offset -->
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs">
+                            <span class="text-slate-300 font-medium">Gate Dead-Time ($\Delta t_{\text{dead}}$)</span>
+                            <span id="sliderDeadtimeVal" class="mono text-violet-400 font-bold">45 ns</span>
+                        </div>
+                        <input id="sliderDeadtime" type="range" min="15" max="150" value="45" step="1" oninput="updateSliders()" class="w-full accent-violet-500 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500 mono">
+                            <span>15 ns (Fastest)</span>
+                            <span>80 ns (Adaptive)</span>
+                            <span>150 ns (Wide)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: CORE PHYSICS & MATHEMATICAL MODEL   -->
+        <!-- ========================================== -->
+        <div id="viewPhysics" class="hidden space-y-6">
+            <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-cyan-500">
+                <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+                    <i data-lucide="book-open" class="w-6 h-6 text-cyan-400"></i>
+                    <span>Microscopic Physics of Thermal Trapping & Dynamic $R_{\text{DS(on)}}$ Current Collapse</span>
+                </h2>
+                <p class="text-sm text-slate-400 mt-2 leading-relaxed">
+                    Gallium Nitride (GaN) high-electron-mobility transistors (HEMTs) rely on a spontaneous and piezoelectric two-dimensional electron gas (2DEG) formed at the AlGaN/GaN heterointerface. Under rapid orbital thermal cycles and high-frequency switching, deep-level energy traps populate and freeze out electrons, creating virtual gates that severely strangle channel conductance ($G$).
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Card 1: Shockley-Read-Hall Trap Emission Kinetics -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="layers" class="w-5 h-5"></i>
+                            <h3 class="font-bold text-white text-base">1. Trap Emission Time Constant & Freeze-Out</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Deep electron traps (predominantly Carbon $C_{\text{N}}$ acceptor states and Iron $Fe_{\text{Ga}}$ substitutionals) exhibit thermally activated Shockley-Read-Hall (SRH) emission. As junction temperature $T$ drops during low-power orbital cruising, emission rates exponentially freeze out:
+                        </p>
+                        <div class="formula-box">
+                            $$\tau_{\text{e}}(T) = \frac{1}{\sigma_{\text{n}} v_{\text{th}} N_{\text{c}}} \exp\left(\frac{E_{\text{C}} - E_{\text{T}}}{k_{\text{B}} T}\right)$$
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed mt-2">
+                            Where $\sigma_{\text{n}}$ is electron capture cross section ($\sim 10^{-15}\text{ cm}^2$), $v_{\text{th}} = \sqrt{3 k_{\text{B}} T / m^*}$ is the electron thermal velocity, $N_{\text{c}}$ is conduction band effective density of states, and $(E_{\text{C}} - E_{\text{T}}) \approx 0.85\text{–}0.95\text{ eV}$ represents the deep trap activation barrier.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-cyan-300 mono">
+                        Cryogenic Freeze: At -55°C, $\tau_{\text{e}} > 10^4\text{ s}$, trapping electrons permanently in the off-state.
+                    </div>
+                </div>
+
+                <!-- Card 2: 2DEG Conductance Collapse Equation -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-amber-400 mb-2">
+                            <i data-lucide="flame" class="w-5 h-5"></i>
+                            <h3 class="font-bold text-white text-base">2. Virtual Gate 2DEG Sheet Carrier Depletion</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Electrons trapped in the buffer/surface behave as a negative space-charge layer ("virtual gate"). When switching ON, channel conductance $G$ drops relative to static datasheet values $G_0(T)$ by the un-emitted trapped areal charge density $n_{\text{trap}}(t)$:
+                        </p>
+                        <div class="formula-box">
+                            $$G(T, t) = \frac{W}{L} q \mu_{\text{2DEG}}(T) \left[ n_{\text{s0}}(T) - \int_0^t \frac{\mathrm{d}n_{\text{trap}}}{\mathrm{d}t} \mathrm{d}t \right]$$
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed mt-2">
+                            Here $n_{\text{s0}}$ is the equilibrium 2DEG density ($\approx 10^{13}\text{ cm}^{-2}$), $\mu_{\text{2DEG}}(T) \propto T^{-1.5}$ is acoustic phonon-limited mobility, and the dynamic resistance degradation factor is:
+                        </p>
+                        <div class="formula-box">
+                            $$\Delta R_{\text{DS(on)}}(t) = \frac{1}{G(T,t)} - R_{\text{static}}(T)$$
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-amber-300 mono">
+                        Result: Dynamic on-resistance expands by up to 2.4x under fast switching duty cycles.
+                    </div>
+                </div>
+
+                <!-- Card 3: Dynamic State Observer Inversion Algorithm -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-violet-400 mb-2">
+                            <i data-lucide="cpu" class="w-5 h-5"></i>
+                            <h3 class="font-bold text-white text-base">3. State Observer Inversion Algorithm</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            The gate driver samples voltage drop $V_{\text{DS,on}}$ at the nano-second threshold following turn-on, calculating instantaneous conductance $G_{\text{meas}} = I_{\text{D}} / V_{\text{DS,on}}$. The observer computes the trap deficit state vector $\hat{X}(k)$:
+                        </p>
+                        <div class="formula-box">
+                            $$\hat{\epsilon}_{\text{trap}}(k) = 1 - \frac{G_{\text{meas}}(T_k, I_k)}{G_{\text{datasheet}}(T_k, I_k)}$$
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed mt-2">
+                            If $\hat{\epsilon}_{\text{trap}} > \epsilon_{\text{threshold}}$ (typically $12\%$), the Kalman observer flags active current collapse, calculating the required sub-threshold de-trapping field excitation $\mathbf{E}_{\text{stim}}$ to force tunnel emission.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-violet-300 mono">
+                        Sampling rate: 50 MSPS on-chip Kelvin source sensing via high-voltage sense FET pad.
+                    </div>
+                </div>
+
+                <!-- Card 4: Sub-Threshold Pulsing & Dead-Time Physics -->
+                <div class="glass-panel p-6 rounded-2xl border border-slate-800 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-emerald-400 mb-2">
+                            <i data-lucide="zap" class="w-5 h-5"></i>
+                            <h3 class="font-bold text-white text-base">4. Field-Assisted Tunneling De-Trapping (Poole-Frenkel)</h3>
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Rather than waiting seconds for thermal emission, GaNTherm injects microsecond sub-threshold resonant pulses ($V_{\text{GS}} \in [-0.5\text{V}, +1.0\text{V}]$ below $V_{\text{th}} \approx +1.8\text{V}$) during inverter dead-times ($\Delta t_{\text{dead}}$), lowering the barrier through the Poole-Frenkel electric-field effect:
+                        </p>
+                        <div class="formula-box">
+                            $$e_{\text{n}}(E, T) = e_{\text{n0}} \exp\left[ \frac{q \sqrt{q \mathbf{E}_{\text{local}} / (\pi \varepsilon_0 \varepsilon_{\text{r}})}}{k_{\text{B}} T} \right]$$
+                        </div>
+                        <p class="text-xs text-slate-400 leading-relaxed mt-2">
+                            By boosting local electric field $\mathbf{E}_{\text{local}}$ inside the access regions right before conduction, trapped carriers are swept cleanly into the drain before inverter power flow starts.
+                        </p>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-slate-800 text-[11px] text-emerald-300 mono">
+                        Efficiency: Recovers 94.6% of lost channel conductance without causing shoot-through.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: NASA SBIR/STTR PROPOSAL & HARDWARE  -->
+        <!-- ========================================== -->
+        <div id="viewProposal" class="hidden space-y-6">
+            
+            <!-- Executive Proposal Banner -->
+            <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-violet-500">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <div class="flex items-center space-x-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                            <span>NASA SBIR/STTR Solicitations — FY2026 Phase I</span>
+                        </div>
+                        <h2 class="text-2xl font-bold text-white mt-1">GaNTherm: Wide-Bandgap GaN HEMT Thermal Trapping & Current-Collapse Auditor</h2>
+                        <p class="text-sm text-slate-400 mt-1 max-w-3xl">
+                            <strong>Topic T15.02:</strong> High-Power-Density Inverters for Electrified Aircraft & Spacecraft Propulsion. Solving thermal-cycling current collapse in cryogenic-to-high-temperature deep-space electric propulsion systems.
+                        </p>
+                    </div>
+                    <div class="text-right flex-shrink-0 bg-slate-950/80 px-4 py-3 rounded-xl border border-slate-800">
+                        <span class="text-xs text-slate-400 block">Total Phase I Budget</span>
+                        <span class="text-2xl font-bold mono text-emerald-400">$225,000</span>
+                        <span class="text-[11px] text-cyan-300 block">6-Month Duration</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STTR Research Partner & Budget Split -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800 md:col-span-1 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                            <i data-lucide="building-2" class="w-5 h-5"></i>
+                            <h3 class="font-bold text-white text-base">Research Institution Partner</h3>
+                        </div>
+                        <div class="text-sm font-semibold text-slate-200">University of Central Florida (UCF)</div>
+                        <div class="text-xs text-slate-400">Center for Advanced Turbomachinery & Energy Research (CATER)</div>
+                        
+                        <div class="mt-4 p-3 bg-slate-950 rounded-xl border border-slate-800/80 space-y-1">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-400">STTR Allocation (30.0%):</span>
+                                <span class="mono text-emerald-400 font-bold">$67,500</span>
+                            </div>
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-400">Small Business Prime (70%):</span>
+                                <span class="mono text-slate-200 font-bold">$157,500</span>
+                            </div>
+                            <div class="flex justify-between text-xs border-t border-slate-800 pt-1 mt-1">
+                                <span class="text-slate-400">Total Program Cost:</span>
+                                <span class="mono text-white font-bold">$225,000</span>
+                            </div>
+                        </div>
+
+                        <p class="text-xs text-slate-400 mt-3 leading-relaxed">
+                            UCF CATER provides high-vacuum cryogenic-to-high-temperature ($77\text{K}\text{ to }500\text{K}$) laser-excited transient thermal test benches for AlGaN/GaN epilayer trap spectroscopy.
+                        </p>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+                        <span>Lead PI: Dr. Subrata Roy</span>
+                        <span class="text-cyan-400 mono">NASA Space Act Approved</span>
+                    </div>
+                </div>
+
+                <!-- 6-Month Milestone Breakdown -->
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800 md:col-span-2">
+                    <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
+                        <div class="flex items-center space-x-2 text-violet-400">
+                            <i data-lucide="milestone" class="w-5 h-5"></i>
+                            <h3 class="font-bold text-white text-base">Phase I 6-Month Work Breakdown Structure (WBS)</h3>
+                        </div>
+                        <span class="text-xs mono text-cyan-400">TRL 3 $\to$ TRL 5 Target</span>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/60 flex items-start space-x-3">
+                            <div class="px-2 py-1 bg-cyan-950 text-cyan-400 border border-cyan-800 rounded font-bold mono text-xs">M1–M2</div>
+                            <div class="flex-1">
+                                <h4 class="text-xs font-semibold text-slate-200">Kinetic Modeling of Deep Buffer Trapping Under Thermal Transients</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Calibrate 2D TCAD Silvaco numerical models of Iron/Carbon doped GaN high-electron-mobility structures against experimental 77K–473K pulsed I-V curves.</p>
+                            </div>
+                            <span class="text-xs mono text-emerald-400 font-semibold">$45,000</span>
+                        </div>
+
+                        <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/60 flex items-start space-x-3">
+                            <div class="px-2 py-1 bg-cyan-950 text-cyan-400 border border-cyan-800 rounded font-bold mono text-xs">M3–M4</div>
+                            <div class="flex-1">
+                                <h4 class="text-xs font-semibold text-slate-200">Real-Time State Observer Inversion Synthesis on FPGA Gate Hardware</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Implement hardware-in-the-loop (HIL) high-speed $(T, G)$ state observer on Xilinx Zynq UltraScale+ with sub-10ns on-resistance extraction algorithm.</p>
+                            </div>
+                            <span class="text-xs mono text-emerald-400 font-semibold">$62,500</span>
+                        </div>
+
+                        <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/60 flex items-start space-x-3">
+                            <div class="px-2 py-1 bg-cyan-950 text-cyan-400 border border-cyan-800 rounded font-bold mono text-xs">M5</div>
+                            <div class="flex-1">
+                                <h4 class="text-xs font-semibold text-slate-200">Closed-Loop Sub-Threshold De-Trapping Pulsing Validation</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Demonstrate dynamic $R_{\text{DS(on)}}$ degradation reduction from $>150\%$ down to $<7\%$ under 500 kHz, 400V inverter load in thermal cycling chambers.</p>
+                            </div>
+                            <span class="text-xs mono text-emerald-400 font-semibold">$60,000</span>
+                        </div>
+
+                        <div class="p-3 bg-slate-950/60 rounded-xl border border-slate-800/60 flex items-start space-x-3">
+                            <div class="px-2 py-1 bg-cyan-950 text-cyan-400 border border-cyan-800 rounded font-bold mono text-xs">M6</div>
+                            <div class="flex-1">
+                                <h4 class="text-xs font-semibold text-slate-200">Phase II Transition Architecture & Radiation-Hardened Tape-Out Plan</h4>
+                                <p class="text-[11px] text-slate-400 mt-0.5">Deliver final report, deliverable prototype gate driver board, and Phase II flight-testing proposal ($1.15M) for NASA Glenn Electric Aircraft Testbed (NEAT).</p>
+                            </div>
+                            <span class="text-xs mono text-emerald-400 font-semibold">$57,500</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phase II Hardware Transition Roadmap -->
+            <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+                <h3 class="font-bold text-white text-base flex items-center space-x-2 mb-4">
+                    <i data-lucide="plane-takeoff" class="w-5 h-5 text-cyan-400"></i>
+                    <span>Phase II Transition Plan: NASA Flight Centers & Commercial Flight Hardware</span>
+                </h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800">
+                        <div class="text-cyan-400 font-bold mb-1">NASA Glenn NEAT Facility</div>
+                        <p class="text-slate-400">Direct integration into the 1-Megawatt megawatt-class electrified aircraft powertrain testbed for hybrid-electric regional transport flight certification.</p>
+                    </div>
+                    <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800">
+                        <div class="text-cyan-400 font-bold mb-1">NASA JPL Deep Space Propulsion</div>
+                        <p class="text-slate-400">Cryogenic Hall-effect and ion propulsion power processing units (PPUs) operating reliably through deep orbital eclipses (-120°C to +150°C).</p>
+                    </div>
+                    <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800">
+                        <div class="text-cyan-400 font-bold mb-1">UCF CATER Vacuum Chambers</div>
+                        <p class="text-slate-400">Environmental flight-stress qualification at $10^{-6}\text{ Torr}$ with combined thermal and electromagnetic vibration test beds.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- TAB 4: COMMERCIAL & NATIONWIDE ARR         -->
+        <!-- ========================================== -->
+        <div id="viewARR" class="hidden space-y-6">
+            
+            <!-- Valuation & ARR Header Banner -->
+            <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-emerald-500">
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    <div>
+                        <span class="text-xs text-emerald-400 font-bold uppercase tracking-wider">Civil & Commercial Market Sizing</span>
+                        <h2 class="text-2xl font-bold text-white mt-1">Nationwide Software & Embedded IP Annual Recurring Revenue (ARR)</h2>
+                        <p class="text-sm text-slate-400 mt-1 max-w-3xl">
+                            Deploying GaNTherm as firmware-licensed gate driver IP and automated health-monitoring telemetry across civil aerospace, electrified transit, and high-density industrial power systems.
+                        </p>
+                    </div>
+                    <div class="flex items-center space-x-4 bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+                        <div>
+                            <span class="text-xs text-slate-400 block">Total Mature ARR</span>
+                            <span class="text-3xl font-extrabold mono text-emerald-400">$218.4M</span>
+                        </div>
+                        <div class="border-l border-slate-800 pl-4">
+                            <span class="text-xs text-slate-400 block">Enterprise Valuation (10x)</span>
+                            <span class="text-2xl font-bold mono text-cyan-400">$2.18B</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ARR Breakdown Table -->
+            <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+                <div class="p-4 border-b border-slate-800 bg-slate-900/40 flex items-center justify-between">
+                    <h3 class="font-bold text-white text-sm flex items-center space-x-2">
+                        <i data-lucide="table" class="w-4 h-4 text-cyan-400"></i>
+                        <span>Addressable Commercial Verticals: Asset Base & SaaS Metric Model</span>
+                    </h3>
+                    <span class="text-xs text-slate-400 mono">FY2027–FY2032 Projection</span>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                            <tr>
+                                <th class="p-3.5">Commercial Vertical</th>
+                                <th class="p-3.5">Target Application</th>
+                                <th class="p-3.5">Nationwide Asset Base</th>
+                                <th class="p-3.5">Software IP / Driver License Fee</th>
+                                <th class="p-3.5 text-right font-bold text-emerald-400">Mature ARR</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60 mono text-slate-300">
+                            <tr class="hover:bg-slate-900/30 transition-colors">
+                                <td class="p-3.5 font-sans font-semibold text-white flex items-center space-x-2">
+                                    <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                                    <span>Commercial eVTOL & AAM</span>
+                                </td>
+                                <td class="p-3.5 font-sans">Electric Vertical Takeoff Propulsion Inverters</td>
+                                <td class="p-3.5">14,500 Aircraft (6 inverters/ea)</td>
+                                <td class="p-3.5">$650 / inverter / yr</td>
+                                <td class="p-3.5 text-right font-bold text-emerald-400">$56.55M</td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/30 transition-colors">
+                                <td class="p-3.5 font-sans font-semibold text-white flex items-center space-x-2">
+                                    <span class="w-2 h-2 rounded-full bg-violet-400"></span>
+                                    <span>Grid Solid-State Transformers</span>
+                                </td>
+                                <td class="p-3.5 font-sans">Utility 800V DC-Fast Charging & Substation SSTs</td>
+                                <td class="p-3.5">42,000 High-Power SST Nodes</td>
+                                <td class="p-3.5">$1,200 / node / yr</td>
+                                <td class="p-3.5 text-right font-bold text-emerald-400">$50.40M</td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/30 transition-colors">
+                                <td class="p-3.5 font-sans font-semibold text-white flex items-center space-x-2">
+                                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                                    <span>Hypersonic & Cryo Space Launch</span>
+                                </td>
+                                <td class="p-3.5 font-sans">Electro-Mechanical Actuators & Cryo Turbopumps</td>
+                                <td class="p-3.5">1,200 Launch Systems & Satellites</td>
+                                <td class="p-3.5">$18,500 / vehicle / yr</td>
+                                <td class="p-3.5 text-right font-bold text-emerald-400">$22.20M</td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/30 transition-colors">
+                                <td class="p-3.5 font-sans font-semibold text-white flex items-center space-x-2">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                                    <span>Hyperscale AI Data Centers</span>
+                                </td>
+                                <td class="p-3.5 font-sans">48V-to-1V Point-of-Load Server Power Units</td>
+                                <td class="p-3.5">1,850,000 Rack Power Units</td>
+                                <td class="p-3.5">$28 / unit / yr</td>
+                                <td class="p-3.5 text-right font-bold text-emerald-400">$51.80M</td>
+                            </tr>
+                            <tr class="hover:bg-slate-900/30 transition-colors">
+                                <td class="p-3.5 font-sans font-semibold text-white flex items-center space-x-2">
+                                    <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                                    <span>Commercial Locomotives & Mining</span>
+                                </td>
+                                <td class="p-3.5 font-sans">Heavy Haul Traction Inverters</td>
+                                <td class="p-3.5">18,200 Heavy Drive Inverters</td>
+                                <td class="p-3.5">$2,050 / inverter / yr</td>
+                                <td class="p-3.5 text-right font-bold text-emerald-400">$37.31M</td>
+                            </tr>
+                        </tbody>
+                        <tfoot class="bg-slate-950 font-bold border-t border-slate-700 text-slate-200">
+                            <tr>
+                                <td colspan="4" class="p-3.5 text-right font-sans text-xs">SUM OF MATURE NATIONWIDE ARR:</td>
+                                <td class="p-3.5 text-right text-emerald-400 mono text-sm">$218.26M</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Deep Dive Cards for Industry Verticals -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Industry 1: eVTOL -->
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                    <div class="flex items-center space-x-2 text-cyan-400 mb-2">
+                        <i data-lucide="plane" class="w-5 h-5"></i>
+                        <h4 class="font-bold text-white text-sm">Commercial Urban Air Mobility & eVTOL</h4>
+                    </div>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Physics in 1 Sentence:</div>
+                    <p class="text-xs text-slate-400 mb-3 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+                        Rapid takeoff-to-cruise altitude transitions trigger 80°C thermal drops in 90 seconds, causing deep buffer states to freeze out and dropping motor drive efficiency right during maximum hover thrust.
+                    </p>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Why Others Missed This (Plain English):</div>
+                    <p class="text-xs text-slate-400">
+                        Incumbent motor controller suppliers rely on static room-temperature datasheet curves ($R_{\text{DS(on)}} = 25\text{ m}\Omega$), completely ignoring non-linear dynamic trap accumulation during emergency full-throttle climb.
+                    </p>
+                </div>
+
+                <!-- Industry 2: Solid-State Transformers -->
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                    <div class="flex items-center space-x-2 text-violet-400 mb-2">
+                        <i data-lucide="zap" class="w-5 h-5"></i>
+                        <h4 class="font-bold text-white text-sm">Solid-State Transformers (SST) & 800V EV Fast Chargers</h4>
+                    </div>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Physics in 1 Sentence:</div>
+                    <p class="text-xs text-slate-400 mb-3 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+                        Intermittent 350kW vehicle charging surges rapidly overheat GaN bridges, causing dynamic on-resistance to jump and generating uncontrolled cascading thermal runaways in sealed outdoor enclosures.
+                    </p>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Why Others Missed This (Plain English):</div>
+                    <p class="text-xs text-slate-400">
+                        Charger OEMs oversize heat sinks and throttle output power arbitrarily because their gate drivers cannot differentiate between bulk thermal heating and reversible trap charge collapse.
+                    </p>
+                </div>
+
+                <!-- Industry 3: Cryo Spacecraft -->
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                    <div class="flex items-center space-x-2 text-amber-400 mb-2">
+                        <i data-lucide="orbit" class="w-5 h-5"></i>
+                        <h4 class="font-bold text-white text-sm">Cryogenic Lunar & Deep-Space Exploration (Artemis)</h4>
+                    </div>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Physics in 1 Sentence:</div>
+                    <p class="text-xs text-slate-400 mb-3 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+                        In lunar shadow at -180°C, trap emission times expand to tens of hours ($\tau_{\text{e}} \gg 10^5\text{ s}$), effectively locking GaN transistors permanently into a high-resistance collapsed state upon reboot.
+                    </p>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Why Others Missed This (Plain English):</div>
+                    <p class="text-xs text-slate-400">
+                        Legacy satellite avionics use heavy resistive trace heaters to keep electronics warm; GaNTherm uses zero-mass electrical sub-threshold gate pulse agitation to de-trap electrons at cryogenic zero.
+                    </p>
+                </div>
+
+                <!-- Industry 4: Data Centers -->
+                <div class="glass-panel p-5 rounded-2xl border border-slate-800">
+                    <div class="flex items-center space-x-2 text-emerald-400 mb-2">
+                        <i data-lucide="server" class="w-5 h-5"></i>
+                        <h4 class="font-bold text-white text-sm">Hyperscale AI Cloud Compute & Data Centers</h4>
+                    </div>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Physics in 1 Sentence:</div>
+                    <p class="text-xs text-slate-400 mb-3 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800">
+                        Microsecond bursts of GPU AI matrix computations shock 48V-to-1V stepdown converters, creating localized electron trapping that saps megawatt-hours of unnecessary data center cooling load.
+                    </p>
+                    <div class="text-xs text-slate-300 font-medium mb-1">Why Others Missed This (Plain English):</div>
+                    <p class="text-xs text-slate-400">
+                        Facility operators assumed efficiency losses were unpreventable silicon/GaN Joule dissipation rather than trapped charge that could be evacuated using synchronized gate dead-time tuning.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Executive Value Proposition & Collaboration Call to Action -->
+            <div class="glass-panel p-6 rounded-2xl border border-cyan-500/30 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-cyan-950/30 flex flex-col sm:flex-row items-center justify-between gap-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Executive Value Proposition</h3>
+                    <p class="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                        GaNTherm eliminates current collapse in wide-bandgap aerospace power systems through intelligent gate driver software—increasing inverter energy efficiency by <strong>4.2%</strong> and reducing propulsion thermal radiator mass by <strong>35%</strong> without redesigning GaN semiconductor fabs.
+                    </p>
+                    <div class="mt-3 flex items-center space-x-4 text-xs">
+                        <span class="text-cyan-400 font-semibold flex items-center space-x-1">
+                            <i data-lucide="mail" class="w-4 h-4"></i>
+                            <span>Inquiries: <a href="mailto:support@rfwavecode.com" class="underline hover:text-cyan-300">support@rfwavecode.com</a></span>
+                        </span>
+                        <span class="text-slate-400">ITAR / EAR99 Compliant Software</span>
+                    </div>
+                </div>
+
+                <a href="mailto:support@rfwavecode.com?subject=GaNTherm%20NASA%20SBIR%20Partnership" class="px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs uppercase tracking-wider flex items-center space-x-2 transition-all shadow-lg glow-cyan flex-shrink-0">
+                    <i data-lucide="external-link" class="w-4 h-4"></i>
+                    <span>Request Licensing Pitch Deck</span>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-[#04060c] mt-12 py-6 text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center space-x-2">
+                <span class="font-bold text-slate-300">GaNTherm™</span>
+                <span>— NASA STTR Topic T15.02 Technical Demonstrator</span>
+            </div>
+            <div class="flex items-center space-x-6 mono text-[11px]">
+                <span>Status: Phase I Ready</span>
+                <span>Subcontract Partner: UCF CATER Labs</span>
+                <span>Direct Contact: support@rfwavecode.com</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ======================================================== -->
+    <!-- JAVASCRIPT: SIMULATION ENGINE, CHARTS, & TAB CONTROLLER -->
+    <!-- ======================================================== -->
+    <script>
+        // Tab Management Mapping
+        const tabMapping = {
+            'sim': { viewId: 'viewSim', btnId: 'tabBtnSim' },
+            'physics': { viewId: 'viewPhysics', btnId: 'tabBtnPhysics' },
+            'proposal': { viewId: 'viewProposal', btnId: 'tabBtnProposal' },
+            'arr': { viewId: 'viewARR', btnId: 'tabBtnARR' }
+        };
+
+        function switchTab(targetKey) {
+            Object.keys(tabMapping).forEach(key => {
+                const item = tabMapping[key];
+                const viewEl = document.getElementById(item.viewId);
+                const btnEl = document.getElementById(item.btnId);
+
+                if (key === targetKey) {
+                    viewEl.classList.remove('hidden');
+                    btnEl.className = "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center space-x-1.5 bg-cyan-500 text-slate-950 shadow-md";
+                } else {
+                    viewEl.classList.add('hidden');
+                    btnEl.className = "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-slate-400 hover:text-slate-200 transition-all flex items-center space-x-1.5";
+                }
+            });
+
+            // Trigger MathJax re-render for formulas
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise();
+            }
+
+            // Refresh icons and resize charts/canvas when returning to sim
+            lucide.createIcons();
+            if (targetKey === 'sim') {
+                setTimeout(() => {
+                    resizeCanvas();
+                    if (phaseChart) phaseChart.resize();
+                    if (ronTimeChart) ronTimeChart.resize();
+                    if (waveformChart) waveformChart.resize();
+                }, 50);
+            }
+        }
+
+        // ==========================================
+        // SIMULATION STATE & KINETIC PARAMETERS
+        // ==========================================
+        const state = {
+            temperature: 120,      // Junction Temp °C
+            frequency: 300,        // kHz
+            deadtime: 45,          // ns
+            autonomous: true,      // Closed-loop de-trapping active
+            trappedDensity: 4.8e12,// cm^-2
+            nominalG0: 21.12,      // S (nominal baseline at 25C)
+            currentG: 14.28,       // Measured Dynamic Conductance S
+            ronDegradation: 1.48,  // Multiplier vs baseline
+            deTrapPulseActive: false,
+            deTrapPulseStrength: 0.0, // V sub-threshold bias
+            thermalTransientRate: 0.0,
+            tick: 0,
+            // Trajectory memory for phase chart
+            trajectoryHistory: []
+        };
+
+        // Static Theoretical Curve: G_0(T) = 21.12 * ( (T+273.15)/298.15 )^(-1.5)
+        function calcStaticConductance(tempC) {
+            const T_kelvin = Math.max(50, tempC + 273.15);
+            return 21.12 * Math.pow(T_kelvin / 298.15, -1.35);
+        }
+
+        // Calculate Trap Freeze Factor: Arrhenius rate
+        function calcTrapRate(tempC) {
+            const T_k = Math.max(50, tempC + 273.15);
+            const kB = 8.617e-5; // eV/K
+            const Ea = 0.88;     // Trap barrier eV
+            // Normalized emission rate (fast above 150C, frozen below 0C)
+            return Math.exp(-Ea / (kB * T_k));
+        }
+
+        // Initialize Charts
+        let phaseChart, ronTimeChart, waveformChart;
+
+        function initCharts() {
+            // 1. Phase Chart: Conductance (G) vs Temperature (T)
+            const phaseCtx = document.getElementById('phaseChart').getContext('2d');
+            
+            // Build nominal baseline curve data points
+            const baselinePoints = [];
+            const collapseBoundary = [];
+            for (let t = -55; t <= 200; t += 5) {
+                const g0 = calcStaticConductance(t);
+                baselinePoints.push({ x: t, y: g0 });
+                // Collapse danger threshold is 25% below nominal
+                collapseBoundary.push({ x: t, y: g0 * 0.72 });
+            }
+
+            phaseChart = new Chart(phaseCtx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Static Datasheet Baseline G₀(T)',
+                            data: baselinePoints,
+                            showLine: true,
+                            borderColor: '#06b6d4',
+                            borderWidth: 2,
+                            borderDash: [4, 4],
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'Current-Collapse Hazard Threshold',
+                            data: collapseBoundary,
+                            showLine: true,
+                            borderColor: 'rgba(244, 63, 94, 0.7)',
+                            backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                            borderWidth: 1.5,
+                            borderDash: [6, 4],
+                            pointRadius: 0,
+                            fill: '-1' // fills region between hazard line and bottom
+                        },
+                        {
+                            label: 'Realtime Trajectory Point',
+                            data: [{ x: state.temperature, y: state.currentG }],
+                            backgroundColor: '#10b981',
+                            borderColor: '#ffffff',
+                            borderWidth: 2,
+                            pointRadius: 6,
+                            pointHoverRadius: 8
+                        },
+                        {
+                            label: 'Historical Trajectory Trace',
+                            data: [],
+                            showLine: true,
+                            borderColor: 'rgba(16, 185, 129, 0.3)',
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'Junction Temperature T (°C)', color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.3)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 9 } },
+                            min: -60,
+                            max: 210
+                        },
+                        y: {
+                            title: { display: true, text: 'Conductance G (Siemens)', color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.3)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 9 } },
+                            min: 4,
+                            max: 38
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#cbd5e1', font: { family: 'Inter', size: 10 }, boxWidth: 12 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `T: ${ctx.parsed.x.toFixed(1)}°C | G: ${ctx.parsed.y.toFixed(2)} S`
+                            }
+                        }
+                    }
+                }
+            });
+
+            // 2. Dynamic R_DS(on) Time Chart
+            const ronCtx = document.getElementById('ronTimeChart').getContext('2d');
+            const timeLabels = Array.from({ length: 40 }, (_, i) => `-${(40 - i)*0.2}s`);
+            const nominalRonData = Array(40).fill(47.3); // Nominal 47.3 mOhm
+            const dynamicRonData = Array(40).fill(70.0);
+
+            ronTimeChart = new Chart(ronCtx, {
+                type: 'line',
+                data: {
+                    labels: timeLabels,
+                    datasets: [
+                        {
+                            label: 'Dynamic R_DS(on) (Active)',
+                            data: dynamicRonData,
+                            borderColor: '#8b5cf6',
+                            backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            pointRadius: 0,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Nominal Static Datasheet',
+                            data: nominalRonData,
+                            borderColor: '#06b6d4',
+                            borderWidth: 1.5,
+                            borderDash: [4, 4],
+                            fill: false,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            title: { display: true, text: 'R_DS(on) (mΩ)', color: '#94a3b8', font: { size: 9 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 9 } },
+                            suggestedMin: 30,
+                            suggestedMax: 120
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#94a3b8', font: { size: 9 }, boxWidth: 10 } }
+                    }
+                }
+            });
+
+            // 3. Adaptive Gate Waveform & Sub-Threshold Pulse Chart
+            const waveCtx = document.getElementById('waveformChart').getContext('2d');
+            const waveLabels = Array.from({ length: 50 }, (_, i) => `${i}ns`);
+            const vgsWave = Array(50).fill(-2.0);
+
+            waveformChart = new Chart(waveCtx, {
+                type: 'line',
+                data: {
+                    labels: waveLabels,
+                    datasets: [
+                        {
+                            label: 'V_GS Gate Drive Waveform',
+                            data: vgsWave,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            borderWidth: 2,
+                            fill: true,
+                            pointRadius: 0,
+                            stepped: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Time in Switching Cycle (ns)', color: '#94a3b8', font: { size: 9 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 8 }, maxTicksLimit: 10 }
+                        },
+                        y: {
+                            title: { display: true, text: 'Gate Bias V_GS (V)', color: '#94a3b8', font: { size: 9 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.25)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 9 } },
+                            min: -4,
+                            max: 6
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // ==========================================
+        // CANVAS 2DEG HETEROSTRUCTURE RENDERING
+        // ==========================================
+        const canvas = document.getElementById('hemtCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const w = rect.width || 600;
+            const h = rect.height || 280;
+            canvas.width = w * window.devicePixelRatio;
+            canvas.height = h * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            initParticles(w, h);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function initParticles(w, h) {
+            particles = [];
+            const count = 45;
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: Math.random() * w,
+                    y: h * 0.58 + (Math.random() - 0.5) * 16, // In the 2DEG quantum well channel
+                    vx: 2 + Math.random() * 4,
+                    trapped: Math.random() < 0.25,
+                    releaseTimer: 0,
+                    size: 2.5 + Math.random() * 1.5
+                });
+            }
+        }
+
+        function drawCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            const w = rect.width || 600;
+            const h = rect.height || 280;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Layer 1: AlGaN Barrier Layer (Top)
+            ctx.fillStyle = '#0f172a';
+            ctx.fillRect(0, 0, w, h * 0.54);
+
+            // Layer 2: 2DEG Quantum Well Heterointerface Line
+            const channelY = h * 0.58;
+            ctx.fillStyle = '#030712';
+            ctx.fillRect(0, channelY - 12, w, 24);
+
+            // 2DEG interface glow line
+            const grad = ctx.createLinearGradient(0, channelY, w, channelY);
+            grad.addColorStop(0, 'rgba(6, 182, 212, 0.2)');
+            grad.addColorStop(0.5, 'rgba(6, 182, 212, 0.8)');
+            grad.addColorStop(1, 'rgba(6, 182, 212, 0.2)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, channelY);
+            ctx.lineTo(w, channelY);
+            ctx.stroke();
+
+            // Layer 3: GaN Buffer Layer with Deep Traps (Bottom)
+            ctx.fillStyle = '#070b14';
+            ctx.fillRect(0, channelY + 12, w, h - (channelY + 12));
+
+            // Layer Labels
+            ctx.font = '10px JetBrains Mono';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText('Al₀.₂₅Ga₀.₇₅N Barrier Layer (25 nm)', 16, 24);
+            ctx.fillStyle = '#38bdf8';
+            ctx.fillText('2DEG Quantum Channel Interface (n_s ≈ 10¹³ cm⁻²)', 16, channelY - 14);
+            ctx.fillStyle = '#64748b';
+            ctx.fillText('GaN Buffer & Substrate (Carbon/Iron Trap Acceptors E_C - 0.9eV)', 16, h - 16);
+
+            // Electrodes (Source, Gate, Drain)
+            const sourceW = 60, gateW = 40, drainW = 60;
+            const sourceX = 30;
+            const gateX = w * 0.44;
+            const drainX = w - drainW - 30;
+
+            // Source Contact
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(sourceX, 30, sourceW, channelY - 30);
+            ctx.strokeStyle = '#38bdf8';
+            ctx.strokeRect(sourceX, 30, sourceW, channelY - 30);
+            ctx.fillStyle = '#cbd5e1';
+            ctx.fillText('SOURCE', sourceX + 8, 48);
+
+            // Gate Electrode (Schottky / MIS)
+            const gateActive = state.deTrapPulseActive;
+            ctx.fillStyle = gateActive ? '#064e3b' : '#312e81';
+            ctx.fillRect(gateX, 20, gateW, channelY - 35);
+            ctx.strokeStyle = gateActive ? '#10b981' : '#818cf8';
+            ctx.strokeRect(gateX, 20, gateW, channelY - 35);
+            ctx.fillStyle = gateActive ? '#6ee7b7' : '#c7d2fe';
+            ctx.fillText('GATE', gateX + 6, 38);
+
+            // Gate electric field emission cone when de-trapping
+            if (gateActive) {
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.12)';
+                ctx.beginPath();
+                ctx.moveTo(gateX, channelY - 35);
+                ctx.lineTo(gateX - 25, channelY + 30);
+                ctx.lineTo(gateX + gateW + 25, channelY + 30);
+                ctx.lineTo(gateX + gateW, channelY - 35);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Drain Contact
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(drainX, 30, drainW, channelY - 30);
+            ctx.strokeStyle = '#f59e0b';
+            ctx.strokeRect(drainX, 30, drainW, channelY - 30);
+            ctx.fillStyle = '#fde68a';
+            ctx.fillText('DRAIN', drainX + 12, 48);
+
+            // Draw Deep Buffer Trap Sites (Fixed points in the buffer)
+            const trapGrid = [
+                { x: w * 0.38, y: channelY + 32 },
+                { x: w * 0.45, y: channelY + 45 },
+                { x: w * 0.52, y: channelY + 28 },
+                { x: w * 0.60, y: channelY + 50 },
+                { x: w * 0.68, y: channelY + 34 },
+            ];
+
+            trapGrid.forEach((site, idx) => {
+                ctx.strokeStyle = 'rgba(244, 63, 94, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(site.x, site.y, 6, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // If collapsed, render trapped electron inside
+                if (state.trappedDensity > 3.0e12) {
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.arc(site.x, site.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Update & Draw Electron Particles
+            particles.forEach(p => {
+                // If sub-threshold de-trapping active, release trapped electrons
+                if (state.deTrapPulseActive && p.trapped) {
+                    p.trapped = false;
+                    p.releaseTimer = 15; // Visual flash
+                }
+
+                if (!p.trapped) {
+                    p.x += p.vx * (state.currentG / 15);
+                    if (p.x > drainX + drainW) {
+                        p.x = sourceX;
+                        // Chance to get captured in trap state under high frequency
+                        if (Math.random() < (state.frequency / 2500) && state.temperature < 80) {
+                            p.trapped = true;
+                        }
+                    }
+
+                    ctx.fillStyle = p.releaseTimer > 0 ? '#fbbf24' : '#22d3ee';
+                    if (p.releaseTimer > 0) p.releaseTimer--;
+                } else {
+                    ctx.fillStyle = '#f43f5e';
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // ==========================================
+        // SIMULATION PHYSICS TICK LOOP
+        // ==========================================
+        function stepPhysics() {
+            state.tick++;
+
+            // 1. Calculate static datasheet baseline conductance at current temp
+            const nominalG = calcStaticConductance(state.temperature);
+            state.nominalG0 = nominalG;
+
+            // 2. Compute Arrhenius trap emission & capture kinetics
+            const emissionRate = calcTrapRate(state.temperature);
+            const freqFactor = (state.frequency / 300);
+
+            // Trap population rate equation: dNt/dt = Capture(f_sw) - Emission(T) - DeTrap(Pulse)
+            let captureDelta = 0.08e12 * freqFactor;
+            let emissionDelta = state.trappedDensity * emissionRate * 4.5;
+            let deTrapDelta = 0;
+
+            // 3. Autonomous State Observer Logic
+            const conductanceRatio = state.currentG / state.nominalG0;
+            const isCollapsing = conductanceRatio < 0.78;
+
+            if (state.autonomous && isCollapsing) {
+                // Trigger sub-threshold de-trapping pulse
+                state.deTrapPulseActive = true;
+                state.deTrapPulseStrength = 1.2; // V
+                deTrapDelta = state.trappedDensity * 0.35; // Expel trapped electrons
+                // Adapt dead-time
+                state.deadtime = Math.min(110, state.deadtime + 2);
+            } else {
+                if (state.tick % 8 === 0) {
+                    state.deTrapPulseActive = false;
+                    state.deTrapPulseStrength = 0.0;
+                    if (state.deadtime > 45) state.deadtime -= 1;
+                }
+            }
+
+            // Update Trapped Density
+            state.trappedDensity = Math.max(0.5e12, Math.min(9.5e12, state.trappedDensity + (captureDelta - emissionDelta - deTrapDelta)));
+
+            // 4. Update Dynamic Conductance G
+            // Conductance is degraded proportionally to trapped density: G = G0 * (1 - Nt / Ns0)
+            const trapDegradationFactor = Math.min(0.65, (state.trappedDensity / 1.0e13) * 0.85);
+            state.currentG = Math.max(2.0, state.nominalG0 * (1.0 - trapDegradationFactor));
+
+            // Calculate Dynamic R_DS(on) in mOhms (R = 1/G * scaling factor)
+            const baseRon = (1 / state.nominalG0) * 1000;
+            const dynamicRon = (1 / state.currentG) * 1000;
+            state.ronDegradation = dynamicRon / baseRon;
+
+            // Manage Phase Chart Trajectory History
+            if (state.tick % 4 === 0) {
+                state.trajectoryHistory.push({ x: state.temperature, y: state.currentG });
+                if (state.trajectoryHistory.length > 25) {
+                    state.trajectoryHistory.shift();
+                }
+            }
+
+            // Update DOM and Charts every 3 ticks to optimize performance
+            if (state.tick % 3 === 0) {
+                updateUI(isCollapsing, dynamicRon, baseRon);
+                updateChartsData(dynamicRon, baseRon);
+            }
+
+            drawCanvas();
+        }
+
+        // Update UI DOM Badges and Readouts
+        function updateUI(isCollapsing, dynamicRon, baseRon) {
+            document.getElementById('metricG').textContent = `${state.currentG.toFixed(2)} S`;
+            const gPercent = ((state.currentG - state.nominalG0) / state.nominalG0 * 100).toFixed(1);
+            const deltaEl = document.getElementById('metricGDelta');
+            deltaEl.textContent = `${gPercent}% ${state.currentG < state.nominalG0 ? 'collapse' : 'nominal'}`;
+            deltaEl.className = state.currentG < state.nominalG0 * 0.78 ? "text-xs mono text-rose-400 font-bold" : "text-xs mono text-emerald-400 font-bold";
+
+            document.getElementById('metricT').textContent = `${state.temperature.toFixed(1)} °C`;
+            document.getElementById('metricNt').textContent = (state.trappedDensity).toExponential(2);
+            document.getElementById('conductanceDeficit').textContent = `Deficit: ${(state.nominalG0 - state.currentG).toFixed(2)} S`;
+            document.getElementById('currentRon').textContent = `${dynamicRon.toFixed(1)} mΩ (${state.ronDegradation.toFixed(2)}x)`;
+
+            // Controller Status Card
+            const stateBadge = document.getElementById('metricState');
+            const pulseBadge = document.getElementById('metricPulse');
+            const subPulseText = document.getElementById('metricSubPulse');
+            const collapseBadge = document.getElementById('collapseBadge');
+
+            if (isCollapsing) {
+                collapseBadge.textContent = "CURRENT COLLAPSE DETECTED";
+                collapseBadge.className = "text-xs text-rose-400 mono font-bold animate-pulse";
+            } else {
+                collapseBadge.textContent = "Operating in Safe Corridor";
+                collapseBadge.className = "text-xs text-emerald-400 mono";
+            }
+
+            if (state.deTrapPulseActive) {
+                stateBadge.textContent = "DE-TRAPPING";
+                stateBadge.className = "text-lg font-bold mono text-cyan-400 animate-pulse";
+                pulseBadge.textContent = "+1.2V PULSE ACTIVE";
+                pulseBadge.className = "text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-700 mono font-bold";
+                subPulseText.textContent = `Poole-Frenkel Emission: ${state.deadtime}ns dead-time`;
+            } else {
+                stateBadge.textContent = state.autonomous ? "AUDITOR ARMED" : "MANUAL BYPASS";
+                stateBadge.className = state.autonomous ? "text-lg font-bold mono text-emerald-400" : "text-lg font-bold mono text-slate-400";
+                pulseBadge.textContent = "MONITORING";
+                pulseBadge.className = "text-xs px-2 py-0.5 rounded bg-slate-900 text-slate-400 border border-slate-700 mono";
+                subPulseText.textContent = `Sub-Threshold De-Trapping: IDLE`;
+            }
+
+            // Canvas live indicators
+            document.getElementById('canvasVgs').textContent = state.deTrapPulseActive ? "+0.8 V (SUB-TH)" : "-2.0 V (OFF)";
+            document.getElementById('canvasDeadtime').textContent = `${state.deadtime} ns`;
+            document.getElementById('canvasDeTrapState').textContent = state.deTrapPulseActive ? "PULSING" : "STANDBY";
+            document.getElementById('canvasDeTrapState').className = state.deTrapPulseActive ? "font-bold mono text-cyan-400 animate-pulse" : "font-bold mono text-slate-400";
+        }
+
+        function updateChartsData(dynamicRon, baseRon) {
+            // Update Phase Space Chart
+            if (phaseChart) {
+                phaseChart.data.datasets[2].data = [{ x: state.temperature, y: state.currentG }];
+                phaseChart.data.datasets[3].data = [...state.trajectoryHistory];
+                phaseChart.update();
+            }
+
+            // Update Dynamic Ron Chart
+            if (ronTimeChart) {
+                const dataArr = ronTimeChart.data.datasets[0].data;
+                dataArr.shift();
+                dataArr.push(dynamicRon);
+
+                const baseArr = ronTimeChart.data.datasets[1].data;
+                baseArr.shift();
+                baseArr.push(baseRon);
+
+                ronTimeChart.update();
+            }
+
+            // Update Waveform Chart
+            if (waveformChart) {
+                const waveArr = waveformChart.data.datasets[0].data;
+                // Generate a realistic PWM pulse cycle with sub-threshold pre-pulse
+                const newWave = [];
+                for (let i = 0; i < 50; i++) {
+                    if (i < 8) {
+                        newWave.push(-2.0); // OFF bias
+                    } else if (i < 16 && state.deTrapPulseActive) {
+                        newWave.push(state.deTrapPulseStrength); // Sub-threshold de-trapping excitation
+                    } else if (i < 20) {
+                        newWave.push(-0.5); // Dead-time margin
+                    } else if (i < 38) {
+                        newWave.push(5.0);  // Fully ON conduction state (+5V)
+                    } else {
+                        newWave.push(-2.0); // Turn-off transition
+                    }
+                }
+                waveformChart.data.datasets[0].data = newWave;
+                waveformChart.update();
+            }
+        }
+
+        // ==========================================
+        // INTERACTIVE SLIDERS & ACTION HANDLERS
+        // ==========================================
+        function updateSliders() {
+            state.temperature = parseFloat(document.getElementById('sliderTemp').value);
+            state.frequency = parseInt(document.getElementById('sliderFreq').value);
+            state.deadtime = parseInt(document.getElementById('sliderDeadtime').value);
+
+            document.getElementById('sliderTempVal').textContent = `${state.temperature} °C`;
+            document.getElementById('sliderFreqVal').textContent = `${state.frequency} kHz`;
+            document.getElementById('sliderDeadtimeVal').textContent = `${state.deadtime} ns`;
+        }
+
+        function toggleAutonomous() {
+            state.autonomous = !state.autonomous;
+            const btn = document.getElementById('btnAutonomousToggle');
+            const txt = document.getElementById('autoBtnText');
+            if (state.autonomous) {
+                btn.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 flex items-center space-x-2";
+                txt.textContent = "Closed-Loop Auditor: ACTIVE";
+            } else {
+                btn.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 flex items-center space-x-2";
+                txt.textContent = "Closed-Loop Auditor: BYPASS";
+            }
+        }
+
+        function injectThermalShock() {
+            // Rapidly drop or surge temperature to trigger severe trap freeze-out
+            state.temperature = -35;
+            document.getElementById('sliderTemp').value = -35;
+            document.getElementById('sliderTempVal').textContent = "-35 °C";
+            // Inject heavy trapped density
+            state.trappedDensity = 8.8e12;
+            state.currentG = 6.2;
+        }
+
+        // ==========================================
+        // INITIALIZATION
+        // ==========================================
+        window.onload = function() {
+            lucide.createIcons();
+            initCharts();
+            resizeCanvas();
+
+            // Run Physics simulation loop at 30 Hz
+            setInterval(stepPhysics, 33);
+        };
+    </script>
+</body>
+</html>
